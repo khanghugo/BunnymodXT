@@ -3892,6 +3892,7 @@ void HwDLL::InsertCommands()
 						player.Ducking = (pl->v.flags & FL_DUCKING) != 0;
 						player.InDuckAnimation = (pl->v.bInDuck != 0);
 						player.DuckTime = static_cast<float>(pl->v.flDuckTime);
+						player.StaminaTime = pl->v.fuser2;
 
 						if (ORIG_PF_GetPhysicsKeyValue) {
 							auto slj = std::atoi(ORIG_PF_GetPhysicsKeyValue(pl, "slj"));
@@ -4475,6 +4476,7 @@ void HwDLL::InsertCommands()
 					player.Ducking = (pl->v.flags & FL_DUCKING) != 0;
 					player.InDuckAnimation = (pl->v.bInDuck != 0);
 					player.DuckTime = static_cast<float>(pl->v.flDuckTime);
+					player.StaminaTime = pl->v.fuser2;
 
 					if (ORIG_PF_GetPhysicsKeyValue) {
 						auto slj = std::atoi(ORIG_PF_GetPhysicsKeyValue(pl, "slj"));
