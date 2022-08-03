@@ -74,6 +74,7 @@ class HwDLL : public IHookableNameFilterOrdered
 	HOOK_DECL(void, __cdecl, DrawCrosshair, int x, int y)
 	HOOK_DECL(void, __cdecl, Draw_FillRGBA, int x, int y, int w, int h, int r, int g, int b, int a)
 	HOOK_DECL(void, __cdecl, PF_traceline_DLL, const Vector* v1, const Vector* v2, int fNoMonsters, edict_t* pentToSkip, TraceResult* ptr)
+	HOOK_DECL(qboolean, __cdecl, CL_CheckGameDirectory, char *gamedir)
 
 	struct cmdbuf_t
 	{
@@ -378,6 +379,7 @@ protected:
 	struct Cmd_BXT_TAS_ExportLibTASInput;
 	struct Cmd_BXT_TAS_Split;
 	struct Cmd_BXT_TAS_New;
+	struct Cmd_BXT_TAS_Check_Position;
 	struct Cmd_BXT_CH_Set_Health;
 	struct Cmd_BXT_Set_Angles;
 	struct Cmd_BXT_CH_Set_Armor;
