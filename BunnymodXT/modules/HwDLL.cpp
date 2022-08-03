@@ -306,6 +306,11 @@ extern "C" void __cdecl PF_traceline_DLL(const Vector* v1, const Vector* v2, int
 {
 	HwDLL::HOOKED_PF_traceline_DLL(v1, v2, fNoMonsters, pentToSkip, ptr);
 }
+
+extern "C" qboolean __cdecl CL_CheckGameDirectory(char *gamedir)
+{
+	return HwDLL::HOOKED_CL_CheckGameDirectory(gamedir);
+}
 #endif
 
 void HwDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* moduleBase, size_t moduleLength, bool needToIntercept)
@@ -421,6 +426,7 @@ void HwDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* modul
 			MemUtils::MarkAsExecutable(ORIG_DrawCrosshair);
 			MemUtils::MarkAsExecutable(ORIG_Draw_FillRGBA);
 			MemUtils::MarkAsExecutable(ORIG_PF_traceline_DLL);
+			MemUtils::MarkAsExecutable(ORIG_CL_CheckGameDirectory);
 		}
 
 		MemUtils::Intercept(moduleName,
@@ -474,7 +480,8 @@ void HwDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* modul
 			ORIG_SPR_Set, HOOKED_SPR_Set,
 			ORIG_DrawCrosshair, HOOKED_DrawCrosshair,
 			ORIG_Draw_FillRGBA, HOOKED_Draw_FillRGBA,
-			ORIG_PF_traceline_DLL, HOOKED_PF_traceline_DLL);
+			ORIG_PF_traceline_DLL, HOOKED_PF_traceline_DLL,
+			ORIG_CL_CheckGameDirectory, HOOKED_CL_CheckGameDirectory);
 	}
 }
 
@@ -533,7 +540,8 @@ void HwDLL::Unhook()
 			ORIG_SPR_Set,
 			ORIG_DrawCrosshair,
 			ORIG_Draw_FillRGBA,
-			ORIG_PF_traceline_DLL);
+			ORIG_PF_traceline_DLL,
+			ORIG_CL_CheckGameDirectory);
 	}
 
 	for (auto cvar : CVars::allCVars)
@@ -620,6 +628,7 @@ void HwDLL::Clear()
 	ORIG_DrawCrosshair = nullptr;
 	ORIG_Draw_FillRGBA = nullptr;
 	ORIG_PF_traceline_DLL = nullptr;
+	ORIG_CL_CheckGameDirectory = nullptr;
 
 	ClientDLL::GetInstance().pEngfuncs = nullptr;
 	ServerDLL::GetInstance().pEngfuncs = nullptr;
@@ -961,6 +970,12 @@ void HwDLL::FindStuff()
 		else
 			EngineDevWarning("[hw dll] Could not find PF_traceline_DLL.\n");
 
+		ORIG_CL_CheckGameDirectory = reinterpret_cast<_CL_CheckGameDirectory>(MemUtils::GetSymbolAddress(m_Handle, "CL_CheckGameDirectory"));
+		if (ORIG_CL_CheckGameDirectory)
+			EngineDevMsg("[hw dll] Found CL_CheckGameDirectory at %p.\n", ORIG_CL_CheckGameDirectory);
+		else
+			EngineDevWarning("[hw dll] Could not find CL_CheckGameDirectory.\n");
+
 		if (!cls || !sv || !svs || !svmove || !ppmove || !host_client || !sv_player || !sv_areanodes || !cmd_text || !cmd_alias || !host_frametime || !cvar_vars || !movevars || !ORIG_hudGetViewAngles || !ORIG_SV_AddLinksToPM || !ORIG_SV_SetMoveVars)
 			ORIG_Cbuf_Execute = nullptr;
 
@@ -1227,6 +1242,7 @@ void HwDLL::FindStuff()
 		DEF_FUTURE(DrawCrosshair)
 		DEF_FUTURE(Draw_FillRGBA)
 		DEF_FUTURE(PF_traceline_DLL)
+		DEF_FUTURE(CL_CheckGameDirectory)
 		#undef DEF_FUTURE
 
 		bool oldEngine = (m_Name.find(L"hl.exe") != std::wstring::npos);
@@ -1978,6 +1994,7 @@ void HwDLL::FindStuff()
 		GET_FUTURE(DrawCrosshair);
 		GET_FUTURE(Draw_FillRGBA);
 		GET_FUTURE(PF_traceline_DLL);
+		GET_FUTURE(CL_CheckGameDirectory);
 
 		if (oldEngine) {
 			GET_FUTURE(LoadAndDecryptHwDLL);
@@ -2042,6 +2059,7 @@ void HwDLL::ResetStateBeforeTASPlayback()
 	PrevFractions = {1, 0, 0, 0 };
 	PrevNormalzs = {0, 0, 0, 0 };
 	ButtonsPresent = false;
+	hltas_filename.clear();
 	demoName.clear();
 	saveName.clear();
 	frametime0ms.clear();
@@ -2397,6 +2415,50 @@ struct HwDLL::Cmd_BXT_TAS_New
 		frame.Commands.clear();
 		frame.SetRepeats(1);
 		hw.newTASResult.PushFrame(frame);
+	}
+};
+
+struct HwDLL::Cmd_BXT_TAS_Check_Position
+{
+	USAGE("Usage: _bxt_tas_check_position <x> <y> <z>\n Checks that the current player position matches the given coordinates, and if it doesn't, restarts the TAS.\n");
+
+	static void handler(float x, float y, float z)
+	{
+		auto &hw = HwDLL::GetInstance();
+
+		if (!hw.runningFrames)
+		{
+			hw.ORIG_Con_Printf("Not playing back a TAS.\n");
+			return;
+		}
+
+		const auto& origin = (*hw.sv_player)->v.origin;
+
+		if (fabs(origin.x - x) < 0.001 &&
+			fabs(origin.y - y) < 0.001 &&
+			fabs(origin.z - z) < 0.001)
+		{
+			hw.ORIG_Con_Printf("Position check succeeded.\n");
+			return;
+		}
+
+		hw.ORIG_Con_Printf("Player position %.4f %.4f %.4f doesn't match the expected position %.4f %.4f %.4f, restarting the script.\n",
+			origin.x, origin.y, origin.z, x, y, z);
+
+		const auto filename = hw.hltas_filename;
+		hw.ResetStateBeforeTASPlayback();
+		hw.hltas_filename = filename;
+
+		if (std::getenv("BXT_SCRIPT"))
+		{
+			// BXT_SCRIPT is set; assume that this TAS requires an RNG seed set at startup and restart the game.
+			hw.ORIG_Cbuf_InsertText("_restart\n");
+		}
+		else
+		{
+			// No seed, just start the playback.
+			hw.StartTASPlayback();
+		}
 	}
 };
 
@@ -3742,6 +3804,7 @@ void HwDLL::RegisterCVarsAndCommandsIfNeeded()
 	RegisterCVar(CVars::bxt_clear_green);
 	RegisterCVar(CVars::bxt_fix_mouse_horizontal_limit);
 	RegisterCVar(CVars::bxt_force_clear);
+	RegisterCVar(CVars::bxt_disable_gamedir_check_in_demo);
 
 	if (ORIG_R_SetFrustum && scr_fov_value)
 		RegisterCVar(CVars::bxt_force_fov);
@@ -3766,6 +3829,7 @@ void HwDLL::RegisterCVarsAndCommandsIfNeeded()
 	wrapper::Add<Cmd_BXT_TAS_ExportLibTASInput, Handler<const char *>>("bxt_tas_export_libtas_input");
 	wrapper::Add<Cmd_BXT_TAS_Split, Handler<const char *>>("bxt_tas_split");
 	wrapper::Add<Cmd_BXT_TAS_New, Handler<const char *, const char *, int>>("bxt_tas_new");
+	wrapper::Add<Cmd_BXT_TAS_Check_Position, Handler<float, float, float>>("_bxt_tas_check_position");
 	wrapper::AddCheat<Cmd_BXT_CH_Set_Health, Handler<float>>("bxt_ch_set_health");
 	wrapper::AddCheat<Cmd_BXT_CH_Set_Armor, Handler<float>>("bxt_ch_set_armor");
 	wrapper::AddCheat<Cmd_BXT_CH_Get_Origin_And_Angles, Handler<>>("bxt_ch_get_pos");
@@ -5913,4 +5977,12 @@ HOOK_DEF_5(HwDLL, void, __cdecl, PF_traceline_DLL, const Vector*, v1, const Vect
 	ORIG_PF_traceline_DLL(v1, v2, fNoMonsters, pentToSkip, ptr);
 
 	ServerDLL::GetInstance().TraceLineWrap(v1, v2, fNoMonsters, pentToSkip, ptr);
+}
+
+HOOK_DEF_1(HwDLL, qboolean, __cdecl, CL_CheckGameDirectory, char*, gamedir)
+{
+	if (ClientDLL::GetInstance().pEngfuncs->pDemoAPI->IsPlayingback() && CVars::bxt_disable_gamedir_check_in_demo.GetBool())
+		return true;
+	else
+		return ORIG_CL_CheckGameDirectory(gamedir);
 }
