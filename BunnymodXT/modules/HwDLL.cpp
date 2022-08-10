@@ -4670,6 +4670,8 @@ HLStrafe::PlayerData HwDLL::GetPlayerData()
 	player.Ducking = (pl->v.flags & FL_DUCKING) != 0;
 	player.InDuckAnimation = (pl->v.bInDuck != 0);
 	player.DuckTime = static_cast<float>(pl->v.flDuckTime);
+	// non-HL stuffs
+	player.StaminaTime = pl->v.fuser2;
 
 	if (ORIG_PF_GetPhysicsKeyValue) {
 		auto slj = std::atoi(ORIG_PF_GetPhysicsKeyValue(pl, "slj"));
@@ -5080,6 +5082,8 @@ bool HwDLL::TryGettingAccurateInfo(float origin[3], float velocity[3], float& he
 	health = pl->v.health;
 	armorvalue = pl->v.armorvalue;
 	waterlevel = pl->v.waterlevel;
+
+	// non-HL stuff
 	stamina = pl->v.fuser2;
 
 	return true;
