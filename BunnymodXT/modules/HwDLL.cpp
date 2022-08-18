@@ -4744,6 +4744,8 @@ HLStrafe::MovementVars HwDLL::GetMovementVars()
 		vars.BhopcapScale = 0.8f;
 		vars.SpeedScale = 1.2f;
 		vars.HasStamina = true;
+		vars.DuckTapSlow = true;
+		vars.DuckTapSlowScale = 0.96f;
 	}
 	else {
 		vars.Maxspeed = CVars::sv_maxspeed.GetFloat();
