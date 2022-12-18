@@ -89,6 +89,11 @@ extern "C" Vector __cdecl _ZN11CBaseEntity17FireBulletsPlayerEj6VectorS0_S0_fiii
 {
 	return ServerDLL::HOOKED_CBaseEntity__FireBulletsPlayer_Linux(thisptr, cShots, vecSrc, vecDirShooting, vecSpread, flDistance, iBulletType, iTracerFreq, iDamage, pevAttacker, shared_rand);
 }
+
+extern "C" Vector __cdecl _ZN11CBaseEntity12FireBullets3E6VectorS0_ffiiifP9entvars_sbi(void* thisptr,Vector vecSrc, Vector vecDirShooting,float vecSpread,float flDistance,int iPenetration, int iBulletType,int iDamage,float flRangeModifier,entvars_t* pevAttacker, bool bPistol,int shared_rand)
+{
+	return ServerDLL::HOOKED_CBaseEntity__FireBullets3_Linux(thisptr, vecSrc, vecDirShooting, vecSpread, flDistance,iPenetration, iBulletType, iDamage, flRangeModifier, pevAttacker, bPistol, shared_rand);
+}
 #endif
 
 void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* moduleBase, size_t moduleLength, bool needToIntercept)
@@ -139,6 +144,7 @@ void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* m
 			ORIG_CBaseEntity__FireBullets_Linux, HOOKED_CBaseEntity__FireBullets_Linux,
 			ORIG_CBaseEntity__FireBulletsPlayer, HOOKED_CBaseEntity__FireBulletsPlayer,
 			ORIG_CBaseEntity__FireBulletsPlayer_Linux, HOOKED_CBaseEntity__FireBulletsPlayer_Linux,
+			ORIG_CBaseEntity__FireBullets3_Linux, HOOKED_CBaseEntity__FireBullets3_Linux,
 			ORIG_CBaseButton__ButtonUse, HOOKED_CBaseButton__ButtonUse,
 			ORIG_CTriggerEndSection__EndSectionUse, HOOKED_CTriggerEndSection__EndSectionUse,
 			ORIG_CTriggerEndSection__EndSectionTouch, HOOKED_CTriggerEndSection__EndSectionTouch,
@@ -184,6 +190,7 @@ void ServerDLL::Unhook()
 			ORIG_CBaseEntity__FireBullets_Linux,
 			ORIG_CBaseEntity__FireBulletsPlayer,
 			ORIG_CBaseEntity__FireBulletsPlayer_Linux,
+			ORIG_CBaseEntity__FireBullets3_Linux,
 			ORIG_CBaseMonster__Killed,
 			ORIG_CBaseButton__ButtonUse,
 			ORIG_CTriggerEndSection__EndSectionUse,
@@ -248,6 +255,7 @@ void ServerDLL::Clear()
 	ORIG_CBaseEntity__FireBullets_Linux = nullptr;
 	ORIG_CBaseEntity__FireBulletsPlayer = nullptr;
 	ORIG_CBaseEntity__FireBulletsPlayer_Linux = nullptr;
+	ORIG_CBaseEntity__FireBullets3_Linux = nullptr;
 	ORIG_CChangeLevel__InTransitionVolume = nullptr;
 	ORIG_CBaseButton__ButtonUse = nullptr;
 	ORIG_CTriggerEndSection__EndSectionUse = nullptr;
@@ -1414,6 +1422,14 @@ void ServerDLL::FindStuff()
 		}
 	}
 
+	{
+		ORIG_CBaseEntity__FireBullets3_Linux = reinterpret_cast<_CBaseEntity__FireBullets3_Linux>(MemUtils::GetSymbolAddress(m_Handle, "_ZN11CBaseEntity12FireBullets3E6VectorS0_ffiiifP9entvars_sbi"));
+		if (ORIG_CBaseEntity__FireBullets3_Linux)
+			EngineDevMsg("[server dll] Found CBaseEntity::FireBullets3 [Linux] at %p.\n", ORIG_CBaseEntity__FireBullets3_Linux);
+		else
+			EngineDevWarning("[server dll] Could not find CBaseEntity::FireBullets3 [Linux].\n");
+	}
+
 	if (!pEngfuncs)
 	{
 		pEngfuncs = reinterpret_cast<enginefuncs_t*>(MemUtils::GetSymbolAddress(m_Handle, "g_engfuncs"));
@@ -1458,7 +1474,7 @@ void ServerDLL::RegisterCVarsAndCommands()
 		REG(bxt_fire_on_button_target);
 		REG(bxt_fire_on_button_command);
 	}
-	if ((ORIG_CBaseEntity__FireBullets && ORIG_CBaseEntity__FireBulletsPlayer) || (ORIG_CBaseEntity__FireBullets_Linux && ORIG_CBaseEntity__FireBulletsPlayer_Linux)) {
+	if ((ORIG_CBaseEntity__FireBullets && ORIG_CBaseEntity__FireBulletsPlayer) || (ORIG_CBaseEntity__FireBullets_Linux && (ORIG_CBaseEntity__FireBulletsPlayer_Linux || ORIG_CBaseEntity__FireBullets3_Linux))) {
 		REG(bxt_show_bullets);
 		REG(bxt_show_bullets_enemy);
 	}
@@ -2838,6 +2854,27 @@ HOOK_DEF_11(ServerDLL, Vector, __cdecl, CBaseEntity__FireBulletsPlayer_Linux,voi
 	fireBulletsPlayer_count = cShots;
 	auto ret = ORIG_CBaseEntity__FireBulletsPlayer_Linux(thisptr, cShots, vecSrc, vecDirShooting, vecSpread, flDistance, iBulletType, iTracerFreq, iDamage, pevAttacker, shared_rand);
 	// just in case
+	fireBulletsPlayer_count = 0;
+	return ret;
+}
+
+HOOK_DEF_12(ServerDLL, Vector, __cdecl, CBaseEntity__FireBullets3_Linux, void*, thisptr, Vector, vecSrc, Vector, vecDirShooting, float, vecSpread, float, flDistance, int, iPenetration, int, iBulletType, int, iDamage, float, flRangeModifier, entvars_t*, pevAttacker, bool, bPistol, int, shared_rand)
+{	
+	if (CVars::bxt_show_bullets.GetBool() || CVars::bxt_show_bullets_enemy.GetBool()) {
+		typedef int anon_func();
+		static unsigned int offset = 0;
+
+		if (!offset) {
+			if (ClientDLL::GetInstance().DoesGameDirMatch("cstrike")) {
+				offset = 0x28;
+			} else if (ClientDLL::GetInstance().DoesGameDirMatch("czeror")) {
+				offset = 0x2a;
+			}
+		}
+
+		fireBulletsPlayer_count = (*reinterpret_cast<anon_func**>(*reinterpret_cast<anon_func***>(reinterpret_cast<uintptr_t>(thisptr)) + offset))();
+	}
+	auto ret = ORIG_CBaseEntity__FireBullets3_Linux(thisptr, vecSrc, vecDirShooting, vecSpread, flDistance, iPenetration, iBulletType, iDamage, flRangeModifier, pevAttacker, bPistol, shared_rand);
 	fireBulletsPlayer_count = 0;
 	return ret;
 }
