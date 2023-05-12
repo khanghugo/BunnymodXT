@@ -746,6 +746,8 @@ void HwDLL::Clear()
 	TargetYawOverrideIndex = 0;
 	TargetYawOverrides.clear();
 	lastLoadedMap.clear();
+	ViewYawOverrideIndex = 0;
+	ViewYawOverrides.clear();
 	isOverridingCamera = false;
 	isOffsettingCamera = false;
 	insideKeyEvent = false;
@@ -2408,6 +2410,8 @@ void HwDLL::ResetStateBeforeTASPlayback()
 	clearedImpulsesForTheFirstTime = false;
 	TargetYawOverrideIndex = 0;
 	TargetYawOverrides.clear();
+	ViewYawOverrideIndex = 0;
+	ViewYawOverrides.clear();
 }
 
 void HwDLL::StartTASPlayback()
@@ -4962,6 +4966,8 @@ void HwDLL::SetTASEditorMode(TASEditorMode mode)
 
 			runningFrames = false;
 			ORIG_Cbuf_InsertText("host_framerate 0;_bxt_norefresh 0;_bxt_min_frametime 0;bxt_taslog 0\n");
+			ViewYawOverrides.clear();
+			ViewYawOverrideIndex = 0;
 
 			assert(movementFrameCounter >= 1);
 			tas_editor_input.first_frame_counter_value = movementFrameCounter - 1;
@@ -5444,6 +5450,24 @@ void HwDLL::InsertCommands()
 					StrafeState.TargetYawOverrideActive = true;
 				}
 
+				if (ViewYawOverrideIndex == ViewYawOverrides.size()) {
+					ViewYawOverrides.clear();
+					ViewYawOverrideIndex = 0;
+				} else {
+					ViewYawOverrideIndex += 1;
+				}
+
+				if (currentRepeat == 0 && f.Comments.substr(0, 18) == "bxt-view-override ") {
+					ViewYawOverrides.clear();
+					ViewYawOverrideIndex = 0;
+
+					std::istringstream iss(f.Comments.substr(18));
+					float yaw;
+					while ((iss >> yaw)) {
+						ViewYawOverrides.push_back(yaw);
+					}
+				}
+
 				f.ResetAutofuncs();
 
 				resulting_frame.SetPitch(p.Pitch);
@@ -5881,6 +5905,9 @@ void HwDLL::InsertCommands()
 				libTASExportFile.close();
 				ORIG_Con_Printf("Exporting finished successfully.\n");
 			}
+
+			ViewYawOverrides.clear();
+			ViewYawOverrideIndex = 0;
 		}
 	} else {
 		if (wasRunningFrames) {

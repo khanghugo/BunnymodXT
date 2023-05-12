@@ -1500,6 +1500,16 @@ namespace TriangleDrawing
 								split_at -= input.frame_bulks[i].GetRepeats();
 							}
 
+							printf("raw = [");
+							for (const auto yaw : unwrapped_yaws) {
+								printf("%f,", yaw);
+							}
+							printf("]\nsmooth = [");
+							for (const auto yaw : yaws) {
+								printf("%f,", yaw);
+							}
+							printf("]\n");
+
 							if (i < input.frame_bulks.size()) {
 								auto frame_bulk = HLTAS::Frame();
 								frame_bulk.TargetYawOverride = yaws;

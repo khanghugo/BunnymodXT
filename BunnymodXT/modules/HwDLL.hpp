@@ -621,6 +621,9 @@ protected:
 	size_t TargetYawOverrideIndex;
 	std::vector<float> TargetYawOverrides;
 public:
+	size_t ViewYawOverrideIndex;
+	std::vector<float> ViewYawOverrides;
+
 	bool ButtonsPresent;
 	HLTAS::StrafeButtons Buttons;
 	HLStrafe::CurrentState StrafeState;
