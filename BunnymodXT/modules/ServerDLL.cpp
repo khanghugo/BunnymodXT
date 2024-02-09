@@ -3351,7 +3351,7 @@ HOOK_DEF_1(ServerDLL, int, __cdecl, CBaseEntity__IsInWorld_Linux, void*, thisptr
 
 typedef int (CBaseEntity__IsPlayer)(void);
 
-HOOK_DEF_2(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, thisptr, void*, pOther)
+HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, thisptr, int, edx, void*, pOther)
 {
 	auto vtable = *reinterpret_cast<uintptr_t *>(pOther);
 	auto pf = reinterpret_cast<CBaseEntity__IsPlayer*>(*reinterpret_cast<uintptr_t **>(vtable + 0xa0)); // 0x28 * 4
@@ -3367,9 +3367,9 @@ HOOK_DEF_2(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, this
 		prev_view = pev->v_angle;
 	}
 
-	ORIG_CBaseTrigger__TeleportTouch(thisptr, pOther);
+	ORIG_CBaseTrigger__TeleportTouch(thisptr, edx, pOther);
 
-	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && (*pf)()) {
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && (*pf)()) {
 		pev->fixangle = 0; // cannot change angle if it is 1
 		pev->velocity = prev_vel;
 		pev->v_angle = prev_view;
@@ -3394,7 +3394,7 @@ HOOK_DEF_2(ServerDLL, void, __cdecl, CBaseTrigger__TeleportTouch_Linux, void*, t
 
 	ORIG_CBaseTrigger__TeleportTouch_Linux(thisptr, pOther);
 
-	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && (*pf)()) {
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && (*pf)()) {
 		pev->fixangle = 0; // cannot change angle if it is 1
 		pev->velocity = prev_vel;
 		pev->v_angle = prev_view;
