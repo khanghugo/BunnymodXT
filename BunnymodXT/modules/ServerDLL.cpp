@@ -96,6 +96,11 @@ extern "C" int __cdecl _ZN11CBaseEntity9IsInWorldEv(void *thisptr)
 {
 	return ServerDLL::HOOKED_CBaseEntity__IsInWorld_Linux(thisptr);
 }
+
+extern "C" void __cdecl _ZN12CBaseTrigger13TeleportTouchEP11CBaseEntity(void* thisptr, void* pOther)
+{
+	return ServerDLL::HOOKED_CBaseTrigger__TeleportTouch_Linux(thisptr, pOther);
+}
 #endif
 
 void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* moduleBase, size_t moduleLength, bool needToIntercept)
@@ -158,7 +163,9 @@ void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* m
 			ORIG_PM_Duck, HOOKED_PM_Duck,
 			ORIG_PM_UnDuck, HOOKED_PM_UnDuck,
 			ORIG_CBaseEntity__IsInWorld, HOOKED_CBaseEntity__IsInWorld,
-			ORIG_CBaseEntity__IsInWorld_Linux, HOOKED_CBaseEntity__IsInWorld_Linux);
+			ORIG_CBaseEntity__IsInWorld_Linux, HOOKED_CBaseEntity__IsInWorld_Linux,
+			ORIG_CBaseTrigger__TeleportTouch, HOOKED_CBaseTrigger__TeleportTouch,
+			ORIG_CBaseTrigger__TeleportTouch_Linux, HOOKED_CBaseTrigger__TeleportTouch_Linux);
 	}
 }
 
@@ -211,7 +218,9 @@ void ServerDLL::Unhook()
 			ORIG_PM_Duck,
 			ORIG_PM_UnDuck,
 			ORIG_CBaseEntity__IsInWorld,
-			ORIG_CBaseEntity__IsInWorld_Linux);
+			ORIG_CBaseEntity__IsInWorld_Linux,
+			ORIG_CBaseTrigger__TeleportTouch,
+			ORIG_CBaseTrigger__TeleportTouch_Linux);
 	}
 
 	Clear();
@@ -284,6 +293,8 @@ void ServerDLL::Clear()
 	ORIG_PM_UnDuck = nullptr;
 	ORIG_CBaseEntity__IsInWorld = nullptr;
 	ORIG_CBaseEntity__IsInWorld_Linux = nullptr;
+	ORIG_CBaseTrigger__TeleportTouch = nullptr;
+	ORIG_CBaseTrigger__TeleportTouch_Linux = nullptr;
 	ppmove = nullptr;
 	offPlayerIndex = 0;
 	offOldbuttons = 0;
@@ -1592,6 +1603,19 @@ void ServerDLL::FindStuff()
 		}
 	}
 
+	{
+		ORIG_CBaseTrigger__TeleportTouch = reinterpret_cast<_CBaseTrigger__TeleportTouch>(MemUtils::GetSymbolAddress(m_Handle, "?TeleportTouch@CBaseTrigger@@QAEXPAVCBaseEntity@@@Z"));
+		if (ORIG_CBaseTrigger__TeleportTouch)
+			EngineDevMsg("[server dll] Found CBaseTrigger::TriggerTouch at %p.\n", ORIG_CBaseTrigger__TeleportTouch);
+		else {
+			ORIG_CBaseTrigger__TeleportTouch_Linux = reinterpret_cast<_CBaseTrigger__TeleportTouch_Linux>(MemUtils::GetSymbolAddress(m_Handle, "_ZN12CBaseTrigger13TeleportTouchEP11CBaseEntity"));
+			if (ORIG_CBaseTrigger__TeleportTouch_Linux)
+				EngineDevMsg("[server dll] Found CBaseTrigger::TriggerTouch [Linux] at %p.\n", ORIG_CBaseTrigger__TeleportTouch_Linux);
+			else
+				EngineDevWarning("[server dll] Could not find CBaseTrigger::TriggerTouch.\n");
+		}
+	}
+
 	if (!pEngfuncs)
 	{
 		pEngfuncs = reinterpret_cast<enginefuncs_t*>(MemUtils::GetSymbolAddress(m_Handle, "g_engfuncs"));
@@ -1653,6 +1677,9 @@ void ServerDLL::RegisterCVarsAndCommands()
 		REG(bxt_cof_disable_monsters_teleport_to_spawn_after_load);
 	if (ORIG_CTriggerCamera__FollowTarget && is_cof)
 		REG(bxt_cof_allow_skipping_all_cutscenes);
+	if (ORIG_CBaseTrigger__TeleportTouch || ORIG_CBaseTrigger__TeleportTouch_Linux) {
+		REG(bxt_ch_trigger_tp_keeps_momentum);
+	}
 
 	REG(bxt_splits_print);
 	REG(bxt_splits_print_times_at_end);
@@ -3320,4 +3347,56 @@ HOOK_DEF_1(ServerDLL, int, __cdecl, CBaseEntity__IsInWorld_Linux, void*, thisptr
 	}
 
 	return ORIG_CBaseEntity__IsInWorld_Linux(thisptr);
+}
+
+typedef int (CBaseEntity__IsPlayer)(void);
+
+HOOK_DEF_2(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, thisptr, void*, pOther)
+{
+	auto vtable = *reinterpret_cast<uintptr_t *>(pOther);
+	auto pf = reinterpret_cast<CBaseEntity__IsPlayer*>(*reinterpret_cast<uintptr_t **>(vtable + 0xa0)); // 0x28 * 4
+
+	auto is_bxt_ch_trigger_tp_keeps_momentum_enabled = CVars::sv_cheats.GetBool() && CVars::bxt_ch_trigger_tp_keeps_momentum.GetBool();
+
+	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(pOther) + 4);
+	Vector prev_vel;
+	Vector prev_view;
+
+	if (pev) {
+		prev_vel = pev->velocity;
+		prev_view = pev->v_angle;
+	}
+
+	ORIG_CBaseTrigger__TeleportTouch(thisptr, pOther);
+
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && (*pf)()) {
+		pev->fixangle = 0; // cannot change angle if it is 1
+		pev->velocity = prev_vel;
+		pev->v_angle = prev_view;
+	}
+}
+
+HOOK_DEF_2(ServerDLL, void, __cdecl, CBaseTrigger__TeleportTouch_Linux, void*, thisptr, void*, pOther)
+{
+	auto vtable = *reinterpret_cast<uintptr_t *>(pOther);
+	auto pf = reinterpret_cast<CBaseEntity__IsPlayer*>(*reinterpret_cast<uintptr_t **>(vtable + 0xa0)); // 0x28 * 4
+
+	auto is_bxt_ch_trigger_tp_keeps_momentum_enabled = CVars::sv_cheats.GetBool() && CVars::bxt_ch_trigger_tp_keeps_momentum.GetBool();
+
+	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(pOther) + 4);
+	Vector prev_vel;
+	Vector prev_view;
+
+	if (pev) {
+		prev_vel = pev->velocity;
+		prev_view = pev->v_angle;
+	}
+
+	ORIG_CBaseTrigger__TeleportTouch_Linux(thisptr, pOther);
+
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && (*pf)()) {
+		pev->fixangle = 0; // cannot change angle if it is 1
+		pev->velocity = prev_vel;
+		pev->v_angle = prev_view;
+	}
 }

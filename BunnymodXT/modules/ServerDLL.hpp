@@ -62,6 +62,8 @@ class ServerDLL : public IHookableDirFilter
 	HOOK_DECL(void, __fastcall, CTriggerCamera__FollowTarget, void* thisptr)
 	HOOK_DECL(int, __fastcall, CBaseEntity__IsInWorld, void* thisptr)
 	HOOK_DECL(int, __cdecl, CBaseEntity__IsInWorld_Linux, void* thisptr)
+	HOOK_DECL(void, __fastcall, CBaseTrigger__TeleportTouch, void* thisptr, void* pOther)
+	HOOK_DECL(void, __cdecl, CBaseTrigger__TeleportTouch_Linux, void* thisptr, void* pOther)
 
 public:
 	static ServerDLL& GetInstance()
