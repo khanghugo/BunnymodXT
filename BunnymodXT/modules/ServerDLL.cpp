@@ -3349,13 +3349,8 @@ HOOK_DEF_1(ServerDLL, int, __cdecl, CBaseEntity__IsInWorld_Linux, void*, thisptr
 	return ORIG_CBaseEntity__IsInWorld_Linux(thisptr);
 }
 
-typedef int (CBaseEntity__IsPlayer)(int);
-
 HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, thisptr, int, edx, void*, pOther)
 {
-	auto vtable = *reinterpret_cast<uintptr_t *>(pOther);
-	auto pf = reinterpret_cast<CBaseEntity__IsPlayer*>(*reinterpret_cast<uintptr_t **>(vtable + 0xa0)); // 0x28 * 4
-
 	auto is_bxt_ch_trigger_tp_keeps_momentum_enabled = CVars::sv_cheats.GetBool() && CVars::bxt_ch_trigger_tp_keeps_momentum.GetBool();
 
 	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(pOther) + 4);
@@ -3369,7 +3364,7 @@ HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, this
 
 	ORIG_CBaseTrigger__TeleportTouch(thisptr, edx, pOther);
 
-	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && (*pf)(0)) {
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev) {
 		pev->fixangle = 0; // cannot change angle if it is 1
 		pev->velocity = prev_vel;
 		pev->v_angle = prev_view;
