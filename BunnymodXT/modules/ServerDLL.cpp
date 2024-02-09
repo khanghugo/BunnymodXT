@@ -1679,6 +1679,9 @@ void ServerDLL::RegisterCVarsAndCommands()
 		REG(bxt_cof_allow_skipping_all_cutscenes);
 	if (ORIG_CBaseTrigger__TeleportTouch || ORIG_CBaseTrigger__TeleportTouch_Linux) {
 		REG(bxt_ch_trigger_tp_keeps_momentum);
+		REG(bxt_ch_trigger_tp_keeps_momentum_velocity);
+		REG(bxt_ch_trigger_tp_keeps_momentum_velocity_redirect);
+		REG(bxt_ch_trigger_tp_keeps_momentum_viewangles);
 	}
 
 	REG(bxt_splits_print);
@@ -3349,6 +3352,29 @@ HOOK_DEF_1(ServerDLL, int, __cdecl, CBaseEntity__IsInWorld_Linux, void*, thisptr
 	return ORIG_CBaseEntity__IsInWorld_Linux(thisptr);
 }
 
+bool ServerDLL::IsPlayer(edict_t *ent)
+{
+	// https://github.com/ValveSoftware/halflife/blob/c7240b965743a53a29491dd49320c88eecf6257b/dlls/player.cpp#L2850
+
+	auto &hw = HwDLL::GetInstance();
+
+	if (strcmp(hw.GetString(ent->v.classname), "player") != 0)
+		return false;
+
+	if (!(ent->v.flags & FL_CLIENT))
+		return false;
+
+	if (pEngfuncs && hw.ppGlobals)
+	{
+		int index = pEngfuncs->pfnIndexOfEdict(ent);
+
+		if ((index < 1) || (index > hw.ppGlobals->maxClients)) // gGlobalVariables.maxClients = svs.maxclients
+			return false;
+	}
+
+	return true;
+}
+
 HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, thisptr, int, edx, void*, pOther)
 {
 	auto is_bxt_ch_trigger_tp_keeps_momentum_enabled = CVars::sv_cheats.GetBool() && CVars::bxt_ch_trigger_tp_keeps_momentum.GetBool();
@@ -3364,20 +3390,34 @@ HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, this
 
 	ORIG_CBaseTrigger__TeleportTouch(thisptr, edx, pOther);
 
-	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev) {
-		pev->fixangle = 0; // cannot change angle if it is 1
-		pev->velocity = prev_vel;
-		pev->v_angle = prev_view;
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && pEngfuncs && IsPlayer(pev->pContainingEntity)) {
+		// Set velocity before viewangles because viewangles will mess with the velocity angle for redirection
+		if (CVars::bxt_ch_trigger_tp_keeps_momentum_velocity.GetBool()) {
+			if (CVars::bxt_ch_trigger_tp_keeps_momentum_velocity_redirect.GetBool()) {
+				// https://github.com/fireblizzard/agmod/blob/bf06e4ffd31c1427784685118820e15552803bcb/dlls/triggers.cpp#L1935
+				// After teleportation, pevToucher has the same viewangles as pentTarget.
+				float xy_vel = prev_vel.Length2D();
+				Vector vecAngles = Vector(0, pev->v_angle.y, 0);
+				Vector vecForward;
+
+				pEngfuncs->pfnAngleVectors(vecAngles, vecForward, nullptr, nullptr);
+
+				pev->velocity.x = vecForward.x * xy_vel;
+				pev->velocity.y = vecForward.y * xy_vel;
+			} else {
+				pev->velocity = prev_vel;
+			}
+		}
+
+		if (CVars::bxt_ch_trigger_tp_keeps_momentum_viewangles.GetBool()) {
+			pev->fixangle = 0; // cannot change angle if it is 1
+			pev->v_angle = prev_view;
+		}
 	}
 }
 
-typedef int (CBaseEntity__IsPlayer_Linux)(void);
-
 HOOK_DEF_2(ServerDLL, void, __cdecl, CBaseTrigger__TeleportTouch_Linux, void*, thisptr, void*, pOther)
 {
-	auto vtable = *reinterpret_cast<uintptr_t *>(pOther);
-	auto pf = reinterpret_cast<CBaseEntity__IsPlayer_Linux*>(*reinterpret_cast<uintptr_t **>(vtable + 0xa0)); // 0x28 * 4
-
 	auto is_bxt_ch_trigger_tp_keeps_momentum_enabled = CVars::sv_cheats.GetBool() && CVars::bxt_ch_trigger_tp_keeps_momentum.GetBool();
 
 	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(pOther) + 4);
@@ -3391,9 +3431,28 @@ HOOK_DEF_2(ServerDLL, void, __cdecl, CBaseTrigger__TeleportTouch_Linux, void*, t
 
 	ORIG_CBaseTrigger__TeleportTouch_Linux(thisptr, pOther);
 
-	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && (*pf)()) {
-		pev->fixangle = 0; // cannot change angle if it is 1
-		pev->velocity = prev_vel;
-		pev->v_angle = prev_view;
+	if (is_bxt_ch_trigger_tp_keeps_momentum_enabled && pev && pEngfuncs && IsPlayer(pev->pContainingEntity)) {
+		// Set velocity before viewangles because viewangles will mess with the velocity angle for redirection
+		if (CVars::bxt_ch_trigger_tp_keeps_momentum_velocity.GetBool()) {
+			if (CVars::bxt_ch_trigger_tp_keeps_momentum_velocity_redirect.GetBool()) {
+				// https://github.com/fireblizzard/agmod/blob/bf06e4ffd31c1427784685118820e15552803bcb/dlls/triggers.cpp#L1935
+				// After teleportation, pevToucher has the same viewangles as pentTarget.
+				float xy_vel = prev_vel.Length2D();
+				Vector vecAngles = Vector(0, pev->v_angle.y, 0);
+				Vector vecForward;
+
+				pEngfuncs->pfnAngleVectors(vecAngles, vecForward, nullptr, nullptr);
+
+				pev->velocity.x = vecForward.x * xy_vel;
+				pev->velocity.y = vecForward.y * xy_vel;
+			} else {
+				pev->velocity = prev_vel;
+			}
+		}
+
+		if (CVars::bxt_ch_trigger_tp_keeps_momentum_viewangles.GetBool()) {
+			pev->fixangle = 0; // cannot change angle if it is 1
+			pev->v_angle = prev_view;
+		}
 	}
 }

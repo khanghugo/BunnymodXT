@@ -115,6 +115,8 @@ public:
 	bool is_cof = false; // Cry of Fear-specific
 	ptrdiff_t offm_fStamina; // Cry of Fear-specific
 
+	bool IsPlayer(edict_t *ent);
+
 private:
 	ServerDLL() : IHookableDirFilter({ L"dlls", L"cl_dlls"}) {};
 	ServerDLL(const ServerDLL&);
