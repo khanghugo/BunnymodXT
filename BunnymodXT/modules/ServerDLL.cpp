@@ -3382,10 +3382,14 @@ HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, this
 	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(pOther) + 4);
 	Vector prev_vel;
 	Vector prev_view;
+	Vector prev_angles;
+	Vector prev_basevelocity;
 
 	if (pev) {
 		prev_vel = pev->velocity;
 		prev_view = pev->v_angle;
+		prev_angles = pev->angles;
+		prev_basevelocity = pev->basevelocity;
 	}
 
 	ORIG_CBaseTrigger__TeleportTouch(thisptr, edx, pOther);
@@ -3396,22 +3400,32 @@ HOOK_DEF_3(ServerDLL, void, __fastcall, CBaseTrigger__TeleportTouch, void*, this
 			if (CVars::bxt_ch_trigger_tp_keeps_momentum_velocity_redirect.GetBool()) {
 				// https://github.com/fireblizzard/agmod/blob/bf06e4ffd31c1427784685118820e15552803bcb/dlls/triggers.cpp#L1935
 				// After teleportation, pevToucher has the same viewangles as pentTarget.
-				float xy_vel = prev_vel.Length2D();
 				Vector vecAngles = Vector(0, pev->v_angle.y, 0);
 				Vector vecForward;
 
 				pEngfuncs->pfnAngleVectors(vecAngles, vecForward, nullptr, nullptr);
 
+				// For velocity
+				float xy_vel = prev_vel.Length2D();
+
 				pev->velocity.x = vecForward.x * xy_vel;
 				pev->velocity.y = vecForward.y * xy_vel;
+
+				// For base velocity
+				float xy_basevel = prev_basevelocity.Length2D();
+
+				pev->basevelocity.x = vecForward.x * xy_basevel;
+				pev->basevelocity.y = vecForward.y * xy_basevel;
 			} else {
 				pev->velocity = prev_vel;
+				pev->basevelocity = prev_basevelocity;
 			}
 		}
 
 		if (CVars::bxt_ch_trigger_tp_keeps_momentum_viewangles.GetBool()) {
 			pev->fixangle = 0; // cannot change angle if it is 1
 			pev->v_angle = prev_view;
+			pev->angles = prev_angles;
 		}
 	}
 }
