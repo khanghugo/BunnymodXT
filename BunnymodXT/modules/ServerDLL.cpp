@@ -22,6 +22,11 @@ extern "C" void __cdecl _Z8CmdStartPK7edict_sPK9usercmd_sj(const edict_t* player
 	return ServerDLL::HOOKED_CmdStart(player, cmd, random_seed);
 }
 
+extern "C" void __cdecl _Z6CmdEndPK7edict_s(edict_t *player)
+{
+	return ServerDLL::HOOKED_CmdEnd(player);
+}
+
 extern "C" void __cdecl _ZN10CNihilanth10DyingThinkEv(void* thisptr)
 {
 	return ServerDLL::HOOKED_CNihilanth__DyingThink_Linux(thisptr);
@@ -124,6 +129,7 @@ void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* m
 			ORIG_PM_AddToTouched, HOOKED_PM_AddToTouched,
 			ORIG_PM_Move, HOOKED_PM_Move,
 			ORIG_CmdStart, HOOKED_CmdStart,
+			ORIG_CmdEnd, HOOKED_CmdEnd,
 			ORIG_CNihilanth__DyingThink, HOOKED_CNihilanth__DyingThink,
 			ORIG_COFGeneWorm__DyingThink, HOOKED_COFGeneWorm__DyingThink,
 			ORIG_CApache__DyingThink, HOOKED_CApache__DyingThink,
@@ -177,6 +183,7 @@ void ServerDLL::Unhook()
 			ORIG_PM_AddToTouched,
 			ORIG_PM_Move,
 			ORIG_CmdStart,
+			ORIG_CmdEnd,
 			ORIG_CNihilanth__DyingThink,
 			ORIG_COFGeneWorm__DyingThink,
 			ORIG_CApache__DyingThink,
@@ -231,6 +238,7 @@ void ServerDLL::Clear()
 	ORIG_PM_Ladder = nullptr;
 	ORIG_PM_Move = nullptr;
 	ORIG_CmdStart = nullptr;
+	ORIG_CmdEnd = nullptr;
 	ORIG_CNihilanth__DyingThink = nullptr;
 	ORIG_CNihilanth__DyingThink_Linux = nullptr;
 	ORIG_COFGeneWorm__DyingThink = nullptr;
@@ -1265,15 +1273,17 @@ void ServerDLL::FindStuff()
 	}
 
 	ORIG_CmdStart = reinterpret_cast<_CmdStart>(MemUtils::GetSymbolAddress(m_Handle, "_Z8CmdStartPK7edict_sPK9usercmd_sj"));
+	ORIG_CmdEnd = reinterpret_cast<_CmdEnd>(MemUtils::GetSymbolAddress(m_Handle, "_Z6CmdEndPK7edict_s"));
 	ORIG_AddToFullPack = reinterpret_cast<_AddToFullPack>(MemUtils::GetSymbolAddress(m_Handle, "_Z13AddToFullPackP14entity_state_siP7edict_sS2_iiPh"));
 	ORIG_ClientCommand = reinterpret_cast<_ClientCommand>(MemUtils::GetSymbolAddress(m_Handle, "_Z13ClientCommandP7edict_s"));
 	ORIG_PM_Move = reinterpret_cast<_PM_Move>(MemUtils::GetSymbolAddress(m_Handle, "PM_Move"));
 
-	if (ORIG_ClientCommand && ORIG_PM_Move && ORIG_AddToFullPack && ORIG_CmdStart) {
+	if (ORIG_ClientCommand && ORIG_PM_Move && ORIG_AddToFullPack && ORIG_CmdStart && ORIG_CmdEnd) {
 		EngineDevMsg("[server dll] Found ClientCommand at %p.\n", ORIG_ClientCommand);
 		EngineDevMsg("[server dll] Found PM_Move at %p.\n", ORIG_PM_Move);
 		EngineDevMsg("[server dll] Found AddToFullPack at %p.\n", ORIG_AddToFullPack);
 		EngineDevMsg("[server dll] Found CmdStart at %p.\n", ORIG_CmdStart);
+		EngineDevMsg("[server dll] Found CmdEnd at %p.\n", ORIG_CmdEnd);
 	} else {
 		ORIG_GetEntityAPI = reinterpret_cast<_GetEntityAPI>(MemUtils::GetSymbolAddress(m_Handle, "GetEntityAPI"));
 		if (ORIG_GetEntityAPI) {
@@ -1287,9 +1297,11 @@ void ServerDLL::FindStuff()
 					ORIG_PM_Move = funcs.pfnPM_Move;
 					ORIG_AddToFullPack = funcs.pfnAddToFullPack;
 					ORIG_CmdStart = funcs.pfnCmdStart;
+					ORIG_CmdEnd = funcs.pfnCmdEnd;
 					EngineDevMsg("[server dll] Found PM_Move at %p.\n", ORIG_PM_Move);
 					EngineDevMsg("[server dll] Found AddToFullPack at %p.\n", ORIG_AddToFullPack);
 					EngineDevMsg("[server dll] Found CmdStart at %p.\n", ORIG_CmdStart);
+					EngineDevMsg("[server dll] Found CmdEnd at %p.\n", ORIG_CmdEnd);
 				}
 			} else {
 				EngineDevWarning("[server dll] Could not get the server DLL function table.\n");
@@ -1659,6 +1671,11 @@ void ServerDLL::RegisterCVarsAndCommands()
 	REG(bxt_splits_autorecord_on_first_split);
 	REG(bxt_splits_start_timer_on_first_split);
 	REG(bxt_splits_end_on_last_split);
+
+	if (ORIG_CmdStart && ORIG_CmdEnd) {
+		REG(bxt_ch_fix_sticky_slide);
+		REG(bxt_ch_fix_sticky_slide_offset);
+	}
 	#undef REG
 }
 
@@ -2129,7 +2146,28 @@ HOOK_DEF_3(ServerDLL, void, __cdecl, CmdStart, const edict_t*, player, const use
 	}
 	#undef ALERT
 
+	cmdStartOrigin = Vector(player->v.origin);
+	cmdStartVelocity = Vector(player->v.velocity);
+
 	return ORIG_CmdStart(player, cmd, seed);
+}
+
+HOOK_DEF_1(ServerDLL, void, __cdecl, CmdEnd, edict_t*, player)
+{
+	if (CVars::bxt_ch_fix_sticky_slide.GetBool() && CVars::sv_cheats.GetBool()) {
+		Vector end_origin = Vector(player->v.origin);
+		Vector end_velocity = Vector(player->v.velocity);
+
+		if (end_velocity.Length2D() == 0.0f // stuck, exclude z vel because it will be -4.0
+			&& cmdStartVelocity.Length() != 0.0f // not standing still, can include z
+			&& cmdStartOrigin == end_origin // origin doesn't change when stuck
+			) {
+			player->v.origin[2] += CVars::bxt_ch_fix_sticky_slide_offset.GetFloat(); // offset so player isn't "stuck"
+			player->v.velocity = cmdStartVelocity;
+		}
+	}
+
+	ORIG_CmdEnd(player);
 }
 
 HOOK_DEF_2(ServerDLL, void, __fastcall, CNihilanth__DyingThink, void*, thisptr, int, edx)

@@ -482,7 +482,7 @@ typedef struct
 	int				(*pfnGetWeaponData)		( struct edict_s *player, struct weapon_data_s *info );
 
 	void			(*pfnCmdStart)			( const edict_t *player, const struct usercmd_s *cmd, unsigned int random_seed );
-	void			(*pfnCmdEnd)			( const edict_t *player );
+	void			(*pfnCmdEnd)			( edict_t *player );
 
 	// Return 1 if the packet is valid.  Set response_buffer_size if you want to send a response packet.  Incoming, it holds the max
 	//  size of the response_buffer, so you must zero it out if you choose not to respond.
