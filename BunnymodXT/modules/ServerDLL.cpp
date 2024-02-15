@@ -2162,7 +2162,26 @@ HOOK_DEF_1(ServerDLL, void, __cdecl, CmdEnd, edict_t*, player)
 			&& cmdStartVelocity.Length() != 0.0f // not standing still, can include z
 			&& cmdStartOrigin == end_origin // origin doesn't change when stuck
 			) {
-			player->v.origin[2] += CVars::bxt_ch_fix_sticky_slide_offset.GetFloat(); // offset so player isn't "stuck"
+			const auto is_duck = player->v.button & (IN_DUCK) || player->v.flags & (FL_DUCKING);
+
+			auto origin_z_offset = CVars::bxt_ch_fix_sticky_slide_offset.GetFloat(); // offset so player isn't "stuck"
+			auto tr_down = HwDLL::GetInstance().PlayerTrace(end_origin, 
+				end_origin + Vector(0, 0, -2), is_duck ? HLStrafe::HullType::DUCKED : HLStrafe::HullType::NORMAL, 0);
+			auto tr_up = HwDLL::GetInstance().PlayerTrace(end_origin, 
+				end_origin + Vector(0, 0, 2), is_duck ? HLStrafe::HullType::DUCKED : HLStrafe::HullType::NORMAL, 0);
+
+			// If trace to the bottom and no hit, then it means the slide is up top.
+			// Already have offset positive by default so there is no need for other case.
+			if (tr_down.Fraction == 1.0 && tr_up.Fraction != 1.0)
+				origin_z_offset = -origin_z_offset;
+			else if (tr_down.Fraction == 1.0 && tr_up.Fraction == 1.0) {
+				// It is not possible to just get stuck in air so this is edge case of being ramp sandwiched.
+				// Very rare and stupid case. No changes then so it is more predictable to maneuver.
+				origin_z_offset = 0;
+				cmdStartVelocity = Vector();
+			}
+
+			player->v.origin[2] += origin_z_offset;
 			player->v.velocity = cmdStartVelocity;
 		}
 	}
