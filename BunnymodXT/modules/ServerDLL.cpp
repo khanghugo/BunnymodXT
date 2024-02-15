@@ -22,7 +22,7 @@ extern "C" void __cdecl _Z8CmdStartPK7edict_sPK9usercmd_sj(const edict_t* player
 	return ServerDLL::HOOKED_CmdStart(player, cmd, random_seed);
 }
 
-extern "C" void __cdecl _Z6CmdEndPK7edict_s(edict_t *player)
+extern "C" void __cdecl _Z6CmdEndPK7edict_s(const edict_t* player)
 {
 	return ServerDLL::HOOKED_CmdEnd(player);
 }
@@ -2152,17 +2152,19 @@ HOOK_DEF_3(ServerDLL, void, __cdecl, CmdStart, const edict_t*, player, const use
 	return ORIG_CmdStart(player, cmd, seed);
 }
 
-HOOK_DEF_1(ServerDLL, void, __cdecl, CmdEnd, edict_t*, player)
+HOOK_DEF_1(ServerDLL, void, __cdecl, CmdEnd, const edict_t*, player)
 {
 	if (CVars::bxt_ch_fix_sticky_slide.GetBool() && CVars::sv_cheats.GetBool()) {
-		Vector end_origin = Vector(player->v.origin);
-		Vector end_velocity = Vector(player->v.velocity);
+		entvars_t *pev = const_cast<entvars_t *>(&player->v);
+
+		Vector end_origin = Vector(pev->origin);
+		Vector end_velocity = Vector(pev->velocity);
 
 		if (end_velocity.Length2D() == 0.0f // stuck, exclude z vel because it will be -4.0
 			&& cmdStartVelocity.Length() != 0.0f // not standing still, can include z
 			&& cmdStartOrigin == end_origin // origin doesn't change when stuck
 			) {
-			const auto is_duck = player->v.button & (IN_DUCK) || player->v.flags & (FL_DUCKING);
+			const auto is_duck = pev->button & (IN_DUCK) || player->v.flags & (FL_DUCKING);
 
 			auto origin_z_offset = CVars::bxt_ch_fix_sticky_slide_offset.GetFloat(); // offset so player isn't "stuck"
 			auto tr_down = HwDLL::GetInstance().PlayerTrace(end_origin, 
@@ -2181,8 +2183,8 @@ HOOK_DEF_1(ServerDLL, void, __cdecl, CmdEnd, edict_t*, player)
 				cmdStartVelocity = Vector();
 			}
 
-			player->v.origin[2] += origin_z_offset;
-			player->v.velocity = cmdStartVelocity;
+			pev->origin[2] += origin_z_offset;
+			pev->velocity = cmdStartVelocity;
 		}
 	}
 
