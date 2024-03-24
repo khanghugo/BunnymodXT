@@ -64,6 +64,8 @@ class ServerDLL : public IHookableDirFilter
 	HOOK_DECL(void, __fastcall, CTriggerCamera__FollowTarget, void* thisptr)
 	HOOK_DECL(int, __fastcall, CBaseEntity__IsInWorld, void* thisptr)
 	HOOK_DECL(int, __cdecl, CBaseEntity__IsInWorld_Linux, void* thisptr)
+	HOOK_DECL(void, __cdecl, CBaseEntity__SUB_UseTargets_Linux, void* thisptr, void* pActivator, int useType, float value)
+	HOOK_DECL(void, __cdecl, CBaseDelay__SUB_UseTargets_Linux, void* thisptr, void* pActivator, int useType, float value)
 
 public:
 	static ServerDLL& GetInstance()
@@ -90,6 +92,7 @@ public:
 	static void OnMultiManagerFired(const char *classname);
 
 	static void DoAutoStopTasks();
+	static void Do_KZ_Timer(entvars_t *pev);
 
 	static void GetTriggerColor(const char *classname, float &r, float &g, float &b);
 	static void GetTriggerAlpha(const char *classname, bool inactive, bool additive, float &a);

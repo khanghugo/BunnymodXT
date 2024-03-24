@@ -108,6 +108,16 @@ extern "C" int __cdecl _ZN11CBaseEntity9IsInWorldEv(void *thisptr)
 {
 	return ServerDLL::HOOKED_CBaseEntity__IsInWorld_Linux(thisptr);
 }
+
+extern "C" void __cdecl _ZN11CBaseEntity14SUB_UseTargetsEPS_8USE_TYPEf(void* thisptr, void* pActivator, int useType, float value)
+{
+	return ServerDLL::HOOKED_CBaseEntity__SUB_UseTargets_Linux(thisptr, pActivator, useType, value);
+}
+
+extern "C" void __cdecl _ZN10CBaseDelay14SUB_UseTargetsEP11CBaseEntity8USE_TYPEf(void* thisptr, void* pActivator, int useType, float value)
+{
+	return ServerDLL::HOOKED_CBaseDelay__SUB_UseTargets_Linux(thisptr, pActivator, useType, value);
+}
 #endif
 
 void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* moduleBase, size_t moduleLength, bool needToIntercept)
@@ -172,7 +182,9 @@ void ServerDLL::Hook(const std::wstring& moduleName, void* moduleHandle, void* m
 			ORIG_PM_Duck, HOOKED_PM_Duck,
 			ORIG_PM_UnDuck, HOOKED_PM_UnDuck,
 			ORIG_CBaseEntity__IsInWorld, HOOKED_CBaseEntity__IsInWorld,
-			ORIG_CBaseEntity__IsInWorld_Linux, HOOKED_CBaseEntity__IsInWorld_Linux);
+			ORIG_CBaseEntity__IsInWorld_Linux, HOOKED_CBaseEntity__IsInWorld_Linux,
+			ORIG_CBaseEntity__SUB_UseTargets_Linux, HOOKED_CBaseEntity__SUB_UseTargets_Linux,
+			ORIG_CBaseDelay__SUB_UseTargets_Linux, HOOKED_CBaseDelay__SUB_UseTargets_Linux);
 	}
 }
 
@@ -227,7 +239,9 @@ void ServerDLL::Unhook()
 			ORIG_PM_Duck,
 			ORIG_PM_UnDuck,
 			ORIG_CBaseEntity__IsInWorld,
-			ORIG_CBaseEntity__IsInWorld_Linux);
+			ORIG_CBaseEntity__IsInWorld_Linux,
+			ORIG_CBaseEntity__SUB_UseTargets_Linux,
+			ORIG_CBaseDelay__SUB_UseTargets_Linux);
 	}
 
 	Clear();
@@ -301,6 +315,8 @@ void ServerDLL::Clear()
 	ORIG_PM_UnDuck = nullptr;
 	ORIG_CBaseEntity__IsInWorld = nullptr;
 	ORIG_CBaseEntity__IsInWorld_Linux = nullptr;
+	ORIG_CBaseEntity__SUB_UseTargets_Linux = nullptr;
+	ORIG_CBaseDelay__SUB_UseTargets_Linux = nullptr;
 	ppmove = nullptr;
 	offPlayerIndex = 0;
 	offOldbuttons = 0;
@@ -1548,6 +1564,30 @@ void ServerDLL::FindStuff()
 		}
 	}
 
+	{
+		if (0) {
+
+		} else {
+			ORIG_CBaseEntity__SUB_UseTargets_Linux = reinterpret_cast<_CBaseEntity__SUB_UseTargets_Linux>(MemUtils::GetSymbolAddress(m_Handle, "_ZN11CBaseEntity14SUB_UseTargetsEPS_8USE_TYPEf"));
+			if (ORIG_CBaseEntity__SUB_UseTargets_Linux)
+				EngineDevMsg("[server dll] Found ORIG_CBaseEntity::SUB_UseTargets_Linux [Linux] at %p.\n", ORIG_CBaseEntity__SUB_UseTargets_Linux);
+			else
+				EngineDevWarning("[server dll] Could not find CBaseEntity::SUB_UseTargets_Linux.\n");
+		}
+	}
+
+	{
+		if (0) {
+
+		} else {
+			ORIG_CBaseDelay__SUB_UseTargets_Linux = reinterpret_cast<_CBaseDelay__SUB_UseTargets_Linux>(MemUtils::GetSymbolAddress(m_Handle, "_ZN10CBaseDelay14SUB_UseTargetsEP11CBaseEntity8USE_TYPEf"));
+			if (ORIG_CBaseDelay__SUB_UseTargets_Linux)
+				EngineDevMsg("[server dll] Found ORIG_CBaseDelay::SUB_UseTargets_Linux [Linux] at %p.\n", ORIG_CBaseDelay__SUB_UseTargets_Linux);
+			else
+				EngineDevWarning("[server dll] Could not find CBaseDelay::SUB_UseTargets_Linux.\n");
+		}
+	}
+
 	if (!pEngfuncs)
 	{
 		pEngfuncs = reinterpret_cast<enginefuncs_t*>(MemUtils::GetSymbolAddress(m_Handle, "g_engfuncs"));
@@ -1620,6 +1660,9 @@ void ServerDLL::RegisterCVarsAndCommands()
 		REG(bxt_ch_fix_sticky_slide);
 		REG(bxt_ch_fix_sticky_slide_offset);
 	}
+
+	if (ORIG_CBaseEntity__SUB_UseTargets_Linux && ORIG_CBaseDelay__SUB_UseTargets_Linux)
+		REG(bxt_timer_kz);
 	#undef REG
 }
 
@@ -3314,6 +3357,78 @@ HOOK_DEF_1(ServerDLL, int, __cdecl, CBaseEntity__IsInWorld_Linux, void*, thisptr
 	}
 
 	return ORIG_CBaseEntity__IsInWorld_Linux(thisptr);
+}
+
+const static std::vector<std::string> start_timer = {
+  "counter_start",
+  "clockstartbutton",
+  "firsttimerelay",
+  "but_start",
+  "counter_start_button",
+  "multi_start",
+  "timer_startbutton",
+  "start_timer_emi",
+  "gogogo",
+  "startcounter"
+};
+
+const static std::vector<std::string> end_timer = {
+  "counter_off",
+  "clockstopbutton",
+  "clockstop",
+  "but_stop",
+  "counter_stop_button",
+  "multi_stop",
+  "stop_counter",
+  "m_counter_end_emi",
+  "stopcounter"
+};
+
+#define STRING(offset) ((const char *)(HwDLL::GetInstance().ppGlobals->pStringBase + (unsigned int)(offset)))
+
+void ServerDLL::Do_KZ_Timer(entvars_t *pev)
+{
+	auto &hw = HwDLL::GetInstance();
+
+	if (!CVars::bxt_timer_kz.GetBool() || !pev || !hw.ppGlobals)
+		return;
+
+	const auto target = STRING(pev->target);
+
+	if (!target)
+		return;
+
+	printf("target is %s\n", target);
+
+	const auto is_start = std::find(std::begin(start_timer), std::end(start_timer), target) != std::end(start_timer);
+
+	if (is_start)
+		hw.TimerReset();
+	else {
+		const auto is_end = std::find(std::begin(end_timer), std::end(end_timer), target) != std::end(end_timer);
+
+		if (is_end)
+			DoAutoStopTasks();
+	}
+
+}
+
+HOOK_DEF_4(ServerDLL, void, __cdecl, CBaseEntity__SUB_UseTargets_Linux, void*, thisptr, void*, pActivator, int, useType, float, value)
+{
+	printf("this runs\n");
+	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(thisptr) + 4);
+	Do_KZ_Timer(pev);
+
+	return ORIG_CBaseEntity__SUB_UseTargets_Linux(thisptr, pActivator, useType, value);
+}
+
+HOOK_DEF_4(ServerDLL, void, __cdecl, CBaseDelay__SUB_UseTargets_Linux, void*, thisptr, void*, pActivator, int, useType, float, value)
+{
+	printf("this runs\n");
+	entvars_t *pev = *reinterpret_cast<entvars_t**>(reinterpret_cast<uintptr_t>(thisptr) + 4);
+	Do_KZ_Timer(pev);
+
+	return ORIG_CBaseDelay__SUB_UseTargets_Linux(thisptr, pActivator, useType, value);
 }
 
 #undef ALERT
