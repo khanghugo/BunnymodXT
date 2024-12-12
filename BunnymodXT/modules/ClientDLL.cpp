@@ -978,6 +978,7 @@ void ClientDLL::RegisterCVarsAndCommands()
 		REG(bxt_viewmodel_restore_viewroll);
 		REG(bxt_viewmodel_viewrollangle);
 		REG(bxt_viewmodel_viewrollspeed);
+		REG(bxt_viewmodel_force_use_viewangles);
 	}
 
 	if (ORIG_HUD_Init)
@@ -1530,6 +1531,12 @@ HOOK_DEF_1(ClientDLL, void, __cdecl, V_CalcRefdef, ref_params_t*, pparams)
 
 			if (CVars::bxt_viewmodel_bob_angled.GetBool())
 				view->curstate.angles = view->angles;
+
+			if (CVars::bxt_viewmodel_force_use_viewangles.GetBool()) {
+				view->angles = pparams->viewangles;
+				view->angles[0] *= -1.0f; // it is flipped for some reasons
+				view->curstate.angles = view->angles;
+			}
 		}
 	}
 

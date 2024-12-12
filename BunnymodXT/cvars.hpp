@@ -54,6 +54,7 @@
 	X(bxt_viewmodel_disable_idle, "0") \
 	X(bxt_viewmodel_disable_equip, "0") \
 	X(bxt_viewmodel_semitransparent, "0") \
+	X(bxt_viewmodel_force_use_viewangles, "0") \
 	X(bxt_clear_color, "") \
 	X(bxt_force_fov, "0") \
 	X(bxt_fix_widescreen_fov, "0") \
